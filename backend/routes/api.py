@@ -1,8 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException
 
-from app.ai_orchestrator import AIOrchestrator
-from app.config import Settings, get_settings
-from app.models import (
+from ai.orchestrator import AIOrchestrator
+from auth.deps import get_current_user, get_store
+from automation.executor import WorkflowExecutor
+from automation.n8n_client import N8NClient
+from automation.validator import AutomationValidationError
+from config import Settings, get_settings
+from database.store import AutomationStore
+from models.schemas import (
     ActivityLog,
     ActivityLogRecord,
     AutomationStatus,
@@ -11,26 +16,8 @@ from app.models import (
     Integration,
     ToggleAutomationRequest,
 )
-from app.n8n_client import N8NClient
-from app.storage import AutomationStore
-from app.validator import AutomationValidationError
 
 router = APIRouter(prefix="/api")
-
-
-def get_user_id(settings: Settings = Depends(get_settings)) -> str:
-    return settings.mock_user_id
-
-
-def get_store(settings: Settings = Depends(get_settings)) -> AutomationStore:
-    if not hasattr(get_store, "_store"):
-        get_store._store = AutomationStore(settings)  # type: ignore[attr-defined]
-    return get_store._store  # type: ignore[attr-defined]
-
-
-@router.get("/health")
-async def health() -> dict:
-    return {"status": "ok", "service": "beingai-api"}
 
 
 @router.post("/automations/create", response_model=AutomationSummary)
@@ -38,7 +25,7 @@ async def create_automation(
     payload: CreateAutomationRequest,
     settings: Settings = Depends(get_settings),
     store: AutomationStore = Depends(get_store),
-    user_id: str = Depends(get_user_id),
+    user_id: str = Depends(get_current_user),
 ) -> AutomationSummary:
     try:
         plan = await AIOrchestrator(settings).create_plan(payload.prompt, payload.business_type)
@@ -48,14 +35,24 @@ async def create_automation(
     deployment = await N8NClient(settings).deploy(plan)
     summary = AutomationSummary(**plan.model_dump(), error_count=0, run_count=0)
     await store.save_automation(user_id, summary, deployment["workflow_id"])
-    await store.log(ActivityLog(automation_id=summary.id, status="created", message="Automation validated and deployed."))
-    return summary
+    await store.log(
+        ActivityLog(
+            automation_id=summary.id,
+            status="created",
+            message="Automation validated and deployed.",
+            metadata={"workflow_id": deployment["workflow_id"], "provider": deployment.get("provider")},
+        )
+    )
+
+    executor = WorkflowExecutor(settings, store)
+    await executor.run_automation(summary.id, user_id, trigger="create")
+    return await store.get_automation(summary.id, user_id)
 
 
 @router.get("/automations", response_model=list[AutomationSummary])
 async def list_automations(
     store: AutomationStore = Depends(get_store),
-    user_id: str = Depends(get_user_id),
+    user_id: str = Depends(get_current_user),
 ) -> list[AutomationSummary]:
     return await store.list_automations(user_id)
 
@@ -66,11 +63,19 @@ async def toggle_automation(
     payload: ToggleAutomationRequest,
     settings: Settings = Depends(get_settings),
     store: AutomationStore = Depends(get_store),
+    user_id: str = Depends(get_current_user),
 ) -> AutomationSummary:
-    workflow_id = await store.get_workflow_id(automation_id)
+    try:
+        workflow_id = await store.get_workflow_id(automation_id, user_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Automation not found") from exc
+
     await N8NClient(settings).activate(workflow_id, payload.enabled)
     status = AutomationStatus.active if payload.enabled else AutomationStatus.paused
-    result = await store.update_status(automation_id, status)
+    try:
+        result = await store.update_status(automation_id, status, user_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Automation not found") from exc
     await store.log(ActivityLog(automation_id=automation_id, status=status.value, message="Automation status changed."))
     return result
 
@@ -78,25 +83,46 @@ async def toggle_automation(
 @router.post("/automations/{automation_id}/retry")
 async def retry_automation(
     automation_id: str,
+    settings: Settings = Depends(get_settings),
     store: AutomationStore = Depends(get_store),
+    user_id: str = Depends(get_current_user),
 ) -> dict:
-    await store.log(ActivityLog(automation_id=automation_id, status="retry_queued", message="Retry requested by user."))
-    return {"status": "retry_queued"}
+    if not await store.automation_owned_by(automation_id, user_id):
+        raise HTTPException(status_code=404, detail="Automation not found")
+
+    await store.log(
+        ActivityLog(
+            automation_id=automation_id,
+            status="retry_requested",
+            message="Retry requested by user.",
+            metadata={"trigger": "retry"},
+        )
+    )
+
+    executor = WorkflowExecutor(settings, store)
+    try:
+        return await executor.run_automation(automation_id, user_id, trigger="retry")
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @router.get("/automations/{automation_id}/logs", response_model=list[ActivityLogRecord])
 async def automation_logs(
     automation_id: str,
     store: AutomationStore = Depends(get_store),
+    user_id: str = Depends(get_current_user),
 ) -> list[ActivityLogRecord]:
+    if not await store.automation_owned_by(automation_id, user_id):
+        raise HTTPException(status_code=404, detail="Automation not found")
     return await store.list_logs(automation_id)
 
 
 @router.post("/billing/create-checkout-session")
-async def create_checkout_session() -> dict:
+async def create_checkout_session(user_id: str = Depends(get_current_user)) -> dict:
     return {
         "status": "stripe_ready",
         "message": "Connect Stripe prices and create hosted checkout sessions here.",
+        "user_id": user_id,
     }
 
 

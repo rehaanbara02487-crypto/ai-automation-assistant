@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     stripe_secret_key: str = ""
     stripe_webhook_secret: str = ""
     clerk_secret_key: str = ""
+    clerk_jwt_issuer: str = ""
     mock_user_id: str = Field(default="local-demo-user")
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
@@ -27,8 +28,33 @@ class Settings(BaseSettings):
         return [origin.strip() for origin in self.api_cors_origins.split(",") if origin.strip()]
 
     @property
+    def is_production(self) -> bool:
+        return self.app_env.strip().lower() == "production"
+
+    @property
+    def supabase_configured(self) -> bool:
+        return bool(self.supabase_url and self.supabase_service_role_key)
+
+    @property
+    def auth_enabled(self) -> bool:
+        return bool(self.clerk_secret_key and self.clerk_jwt_issuer)
+
+    @property
     def n8n_enabled(self) -> bool:
         return bool(self.n8n_base_url and self.n8n_api_key)
+
+    def production_issues(self) -> list[str]:
+        if not self.is_production:
+            return []
+
+        issues: list[str] = []
+        if not self.auth_enabled:
+            issues.append("Set CLERK_SECRET_KEY and CLERK_JWT_ISSUER for production auth.")
+        if not self.supabase_configured:
+            issues.append("Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY for persistent data.")
+        if any("localhost" in origin or "127.0.0.1" in origin for origin in self.cors_origins):
+            issues.append("API_CORS_ORIGINS should list your production frontend URL, not localhost.")
+        return issues
 
 
 @lru_cache

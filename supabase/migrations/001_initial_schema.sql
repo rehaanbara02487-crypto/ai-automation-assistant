@@ -1,5 +1,15 @@
 create extension if not exists "uuid-ossp";
 
+create table if not exists public.users (
+  id text primary key,
+  email text,
+  full_name text,
+  business_type text,
+  onboarding_completed boolean not null default false,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create table if not exists public.plans (
   id text primary key,
   name text not null,
@@ -18,7 +28,7 @@ on conflict (id) do nothing;
 
 create table if not exists public.subscriptions (
   id uuid primary key default uuid_generate_v4(),
-  user_id text not null,
+  user_id text not null references public.users(id) on delete cascade,
   plan_id text not null references public.plans(id),
   stripe_customer_id text,
   stripe_subscription_id text,
@@ -29,7 +39,7 @@ create table if not exists public.subscriptions (
 
 create table if not exists public.integrations (
   id uuid primary key default uuid_generate_v4(),
-  user_id text not null,
+  user_id text not null references public.users(id) on delete cascade,
   app text not null,
   status text not null default 'available',
   encrypted_secret_ref text,
@@ -40,7 +50,7 @@ create table if not exists public.integrations (
 
 create table if not exists public.automations (
   id uuid primary key,
-  user_id text not null,
+  user_id text not null references public.users(id) on delete cascade,
   title text not null,
   status text not null check (status in ('active', 'draft', 'failed', 'paused')),
   trigger text not null,
@@ -65,6 +75,7 @@ create table if not exists public.workflow_logs (
 );
 
 alter table public.plans enable row level security;
+alter table public.users enable row level security;
 alter table public.subscriptions enable row level security;
 alter table public.integrations enable row level security;
 alter table public.automations enable row level security;
@@ -72,6 +83,9 @@ alter table public.workflow_logs enable row level security;
 
 create policy "Plans are readable" on public.plans
   for select using (true);
+
+create policy "Users can manage own profile" on public.users
+  for all using (auth.jwt() ->> 'sub' = id);
 
 create policy "Users can read own subscriptions" on public.subscriptions
   for select using (auth.jwt() ->> 'sub' = user_id);
@@ -93,4 +107,3 @@ create policy "Users can read logs for own automations" on public.workflow_logs
 
 create index if not exists automations_user_id_idx on public.automations(user_id);
 create index if not exists workflow_logs_automation_id_idx on public.workflow_logs(automation_id);
-

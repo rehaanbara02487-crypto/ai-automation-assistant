@@ -3,10 +3,10 @@ from uuid import uuid4
 
 from openai import AsyncOpenAI
 
-from app.automation_catalog import infer_capabilities
-from app.config import Settings
-from app.models import AutomationPlan, AutomationStatus, StepKind, WorkflowStep
-from app.validator import validate_plan
+from automation.catalog import infer_capabilities
+from automation.validator import validate_plan
+from config import Settings
+from models.schemas import AutomationPlan, AutomationStatus, StepKind, WorkflowStep
 
 
 SYSTEM_PROMPT = """
@@ -114,4 +114,3 @@ class AIOrchestrator:
             return normalized.rstrip(".")
         label = business_type.replace("_", " ").title()
         return f"{label} automation"
-

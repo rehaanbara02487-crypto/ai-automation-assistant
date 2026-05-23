@@ -13,6 +13,12 @@ if ($health.status -ne "ok") {
 }
 Write-Host "OK health"
 
+$ready = Invoke-RestMethod "$ApiUrl/api/ready"
+if ($ready.status -notin @("ready", "degraded")) {
+  throw "Readiness check returned unexpected status: $($ready.status)"
+}
+Write-Host "OK ready ($($ready.status))"
+
 $integrations = Invoke-RestMethod "$ApiUrl/api/integrations"
 if ($integrations.Count -lt 5) {
   throw "Expected at least 5 integrations"
@@ -41,10 +47,14 @@ $retry = Invoke-RestMethod `
   -Uri "$ApiUrl/api/automations/$($automation.id)/retry" `
   -Method Post
 
-if ($retry.status -ne "retry_queued") {
-  throw "Retry endpoint failed"
+if ($retry.status -notin @("success", "failed", "queued")) {
+  throw "Retry endpoint returned an unexpected status: $($retry.status)"
 }
-Write-Host "OK retry queued"
+Write-Host "OK retry executed: $($retry.status)"
+if ($retry.run_count -lt 1) {
+  throw "Expected run_count to increase after retry"
+}
+Write-Host "OK run_count=$($retry.run_count)"
 
 Write-Host "Local smoke test passed"
 

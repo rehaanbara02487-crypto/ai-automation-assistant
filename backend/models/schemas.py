@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -9,6 +9,13 @@ class AutomationStatus(str, Enum):
     draft = "draft"
     failed = "failed"
     paused = "paused"
+
+
+class ExecutionStatus(str, Enum):
+    queued = "queued"
+    running = "running"
+    success = "success"
+    failed = "failed"
 
 
 class StepKind(str, Enum):
@@ -58,6 +65,7 @@ class ActivityLog(BaseModel):
     automation_id: str
     status: str
     message: str
+    metadata: Dict[str, Any] = Field(default_factory=dict)
 
 
 class ActivityLogRecord(ActivityLog):

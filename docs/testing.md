@@ -45,7 +45,7 @@ Invoke-RestMethod `
 
 Expected result: HTTP validation error.
 
-Unsupported apps should not be deployed as raw invented actions. The planner maps only to the supported catalog in `apps/api/app/automation_catalog.py`.
+Unsupported apps should not be deployed as raw invented actions. The planner maps only to the supported catalog in `backend/automation/catalog.py`.
 
 ## Authentication Test
 
@@ -57,8 +57,8 @@ Local demo mode:
 
 Real Clerk mode:
 
-- Add `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` to `apps/web/.env.local`.
-- Add `CLERK_SECRET_KEY` to `apps/web/.env.local`.
+- Add `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` to `frontend/.env.local`.
+- Add `CLERK_SECRET_KEY` to `frontend/.env.local`.
 - Restart `npm run dev`.
 - Protected pages should require login.
 
@@ -72,8 +72,7 @@ Mock n8n mode:
 
 Real n8n mode:
 
-- Add `N8N_BASE_URL` and `N8N_API_KEY` to `apps/api/.env`.
+- Add `N8N_BASE_URL` and `N8N_API_KEY` to `backend/.env`.
 - Restart backend.
 - Create an automation.
 - Confirm the workflow appears in n8n.
-

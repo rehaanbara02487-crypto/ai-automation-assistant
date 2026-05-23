@@ -1,7 +1,7 @@
 from typing import List
 
-from app.automation_catalog import CAPABILITIES, SUPPORTED_APPS
-from app.models import AutomationPlan, StepKind
+from automation.catalog import CAPABILITIES, SUPPORTED_APPS
+from models.schemas import AutomationPlan, StepKind
 
 
 class AutomationValidationError(ValueError):
@@ -31,4 +31,3 @@ def validate_plan(plan: AutomationPlan) -> AutomationPlan:
         raise AutomationValidationError("This request includes an action BeingAI cannot safely automate yet.")
 
     return plan
-

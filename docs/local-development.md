@@ -5,9 +5,21 @@ This project is designed to work on localhost before any production hosting.
 ## Folder Structure
 
 ```text
-apps/
-  web/                  Next.js frontend
-  api/                  FastAPI backend
+frontend/               Next.js frontend
+  app/
+  components/
+  lib/
+  hooks/
+  services/
+  types/
+backend/                FastAPI backend
+  routes/
+  services/
+  ai/
+  automation/
+  models/
+  database/
+  middleware/
 docs/                   Setup, testing, deployment notes
 samples/workflows/      Example readable automation plans
 scripts/                Local helper scripts
@@ -29,22 +41,24 @@ Copy examples first:
 
 ```powershell
 Copy-Item .env.example .env
-Copy-Item apps/web/.env.example apps/web/.env.local
-Copy-Item apps/api/.env.example apps/api/.env
+Copy-Item frontend/.env.example frontend/.env.local
+Copy-Item backend/.env.example backend/.env
 ```
 
 For the fastest local demo, leave Clerk, Supabase, OpenAI, n8n, and Stripe keys blank.
 
+When both `CLERK_SECRET_KEY` and `CLERK_JWT_ISSUER` are set on the backend, protected API routes require a Clerk bearer token. Leave either variable blank to keep local demo mode (`local-demo-user`).
+
 Recommended local values:
 
 ```text
-apps/web/.env.local
+frontend/.env.local
 NEXT_PUBLIC_APP_URL=http://127.0.0.1:3000
 NEXT_PUBLIC_API_URL=http://127.0.0.1:8000
 ```
 
 ```text
-apps/api/.env
+backend/.env
 APP_ENV=development
 API_CORS_ORIGINS=http://127.0.0.1:3000,http://localhost:3000
 OPENAI_MODEL=gpt-4.1-mini
@@ -57,14 +71,14 @@ Never put real secrets in Git.
 Frontend:
 
 ```powershell
-cd apps/web
+cd frontend
 npm install
 ```
 
 Backend:
 
 ```powershell
-cd apps/api
+cd backend
 python -m venv .venv
 .venv/Scripts/activate
 pip install -r requirements.txt
@@ -75,15 +89,15 @@ pip install -r requirements.txt
 Terminal 1, backend:
 
 ```powershell
-cd apps/api
+cd backend
 .venv/Scripts/activate
-uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+uvicorn main:app --reload --host 127.0.0.1 --port 8000
 ```
 
 Terminal 2, frontend:
 
 ```powershell
-cd apps/web
+cd frontend
 npm run dev
 ```
 
@@ -100,8 +114,8 @@ To connect Supabase locally:
 
 1. Create a Supabase project.
 2. Run `supabase/migrations/001_initial_schema.sql`.
-3. Add `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` to `apps/api/.env`.
-4. Add `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` to `apps/web/.env.local`.
+3. Add `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` to `backend/.env`.
+4. Add `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` to `frontend/.env.local`.
 
 ## 6. Local API Testing
 
@@ -147,4 +161,3 @@ Invoke-RestMethod `
 - If OpenAI is blank, the backend uses the deterministic fallback planner.
 - If n8n is blank, deployment uses mock mode.
 - If Clerk keys are blank, auth pages show local demo placeholders.
-

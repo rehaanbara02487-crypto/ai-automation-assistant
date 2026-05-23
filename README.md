@@ -16,9 +16,21 @@ The MVP is intentionally simple:
 
 ```text
 beingai-assistant/
-  apps/
-    web/                  Next.js SaaS app
-    api/                  FastAPI backend
+  frontend/               Next.js SaaS app
+    app/
+    components/
+    hooks/
+    lib/
+    services/
+    types/
+  backend/                FastAPI backend
+    routes/
+    services/
+    ai/
+    automation/
+    models/
+    database/
+    middleware/
   supabase/
     migrations/           SQL schema and policies
   samples/
@@ -43,26 +55,25 @@ Copy the environment templates:
 
 ```powershell
 Copy-Item .env.example .env
-Copy-Item apps/web/.env.example apps/web/.env.local
-Copy-Item apps/api/.env.example apps/api/.env
+Copy-Item frontend/.env.example frontend/.env.local
+Copy-Item backend/.env.example backend/.env
 ```
 
 Install frontend dependencies:
 
 ```powershell
-cd apps/web
-npm install
-npm run dev
+npm run install:frontend
+npm run dev:frontend
 ```
 
 Install backend dependencies:
 
 ```powershell
-cd apps/api
+cd backend
 python -m venv .venv
 .venv/Scripts/activate
 pip install -r requirements.txt
-uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+uvicorn main:app --reload --host 127.0.0.1 --port 8000
 ```
 
 Open:
@@ -91,5 +102,10 @@ For local development, n8n deployment is simulated unless `N8N_BASE_URL` and `N8
 
 ## Deployment
 
-Do not deploy first. Once localhost works and tests pass, follow [docs/github.md](docs/github.md), then [docs/deployment.md](docs/deployment.md).
+Once localhost works and tests pass, follow [docs/github.md](docs/github.md), then the production guide in [docs/deployment.md](docs/deployment.md).
 
+Quick targets:
+
+- **Frontend:** Vercel, root directory `frontend`
+- **Backend:** Render or Railway, root directory `backend`, health check `/api/health`
+- **Database:** Supabase migration in `supabase/migrations/`
