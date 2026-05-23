@@ -29,3 +29,11 @@ export type Integration = {
   status: "connected" | "available" | "mock";
 };
 
+export type ActivityLogRecord = {
+  id: string;
+  automation_id: string;
+  status: string;
+  message: string;
+  created_at: string;
+};
+

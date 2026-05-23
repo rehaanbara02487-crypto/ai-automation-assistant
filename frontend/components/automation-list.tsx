@@ -1,61 +1,75 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { AlertTriangle, CheckCircle2, Clock3, RefreshCcw, ToggleLeft, ToggleRight } from "lucide-react";
+import { useState } from "react";
+import Link from "next/link";
+import { AlertTriangle, CheckCircle2, Clock3, PlusCircle, RefreshCcw, ToggleLeft, ToggleRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { getAutomations, retryAutomation, toggleAutomation } from "@/services/api";
+import { Skeleton } from "@/components/ui/skeleton";
+import { notifyAutomationsChanged } from "@/hooks/use-automations";
+import { retryAutomation, toggleAutomation } from "@/services/api";
 import type { AutomationSummary } from "@/types/automation";
 
-const fallback: AutomationSummary[] = [
-  {
-    id: "demo-1",
-    title: "Lead capture to Sheets and Telegram",
-    status: "active",
-    trigger: "New form response",
-    actions: ["Save lead to Google Sheets", "Notify owner on Telegram"],
-    summary: "Every form lead is saved and sent to you instantly.",
-    steps: [],
-    error_count: 0,
-    run_count: 42,
-    last_run_at: "Today"
-  },
-  {
-    id: "demo-2",
-    title: "Appointment reminder on WhatsApp",
-    status: "paused",
-    trigger: "New appointment booking",
-    actions: ["Send reminder message", "Log delivery"],
-    summary: "Customers receive a friendly reminder before their visit.",
-    steps: [],
-    error_count: 1,
-    run_count: 15,
-    last_run_at: "Yesterday"
-  }
-];
+type AutomationListProps = {
+  automations: AutomationSummary[];
+  loading: boolean;
+  onRefresh?: () => Promise<void>;
+};
 
-export function AutomationList() {
-  const [items, setItems] = useState<AutomationSummary[]>(fallback);
+export function AutomationList({ automations, loading, onRefresh }: AutomationListProps) {
   const [notice, setNotice] = useState("");
-
-  useEffect(() => {
-    getAutomations().then(setItems).catch(() => setItems(fallback));
-  }, []);
 
   async function onToggle(item: AutomationSummary) {
     const next = item.status !== "active";
-    setItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, status: next ? "active" : "paused" } : entry));
-    await toggleAutomation(item.id, next).catch(() => setNotice("Saved locally. Backend will sync when connected."));
+    setNotice("");
+    try {
+      await toggleAutomation(item.id, next);
+      await onRefresh?.();
+      notifyAutomationsChanged();
+    } catch {
+      setNotice("Could not update automation status. Try again.");
+    }
   }
 
   async function onRetry(item: AutomationSummary) {
-    setNotice(`Retry started for ${item.title}.`);
-    await retryAutomation(item.id).catch(() => setNotice("Retry queued locally. Backend will sync when connected."));
+    setNotice("");
+    try {
+      await retryAutomation(item.id);
+      setNotice(`Retry queued for ${item.title}.`);
+      await onRefresh?.();
+      notifyAutomationsChanged();
+    } catch {
+      setNotice("Could not queue retry. Try again.");
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="space-y-3">
+        <Skeleton className="h-32 w-full" />
+        <Skeleton className="h-32 w-full" />
+      </div>
+    );
+  }
+
+  if (automations.length === 0) {
+    return (
+      <div className="rounded-lg border border-dashed border-ink/15 bg-white/50 p-8 text-center dark:border-white/15 dark:bg-white/5">
+        <p className="font-bold">No automations yet</p>
+        <p className="mt-2 text-sm text-ink/65 dark:text-white/65">Describe your first task and BeingAI will build it for you.</p>
+        <Link href="/builder" className="mt-4 inline-block">
+          <Button>
+            <PlusCircle className="h-4 w-4" />
+            Create automation
+          </Button>
+        </Link>
+      </div>
+    );
   }
 
   return (
     <div className="space-y-3">
       {notice ? <p className="rounded-md bg-saffron/20 px-3 py-2 text-sm font-semibold">{notice}</p> : null}
-      {items.map((item) => (
+      {automations.map((item) => (
         <article key={item.id} className="rounded-lg border border-ink/10 bg-white p-5 shadow-soft dark:border-white/10 dark:bg-white/10">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div>
@@ -74,13 +88,23 @@ export function AutomationList() {
               </div>
               <p className="mt-2 text-sm text-ink/65 dark:text-white/65">{item.summary}</p>
               <div className="mt-4 grid gap-2 text-sm sm:grid-cols-3">
-                <p><span className="font-bold">Trigger:</span> {item.trigger}</p>
-                <p><span className="font-bold">Runs:</span> {item.run_count}</p>
-                <p><span className="font-bold">Last run:</span> {item.last_run_at ?? "Not yet"}</p>
+                <p>
+                  <span className="font-bold">Trigger:</span> {item.trigger}
+                </p>
+                <p>
+                  <span className="font-bold">Runs:</span> {item.run_count}
+                </p>
+                <p>
+                  <span className="font-bold">Last run:</span> {item.last_run_at ?? "Not yet"}
+                </p>
               </div>
             </div>
             <div className="flex gap-2">
-              <Button variant="secondary" onClick={() => onToggle(item)} title={item.status === "active" ? "Pause automation" : "Enable automation"}>
+              <Button
+                variant="secondary"
+                onClick={() => onToggle(item)}
+                title={item.status === "active" ? "Pause automation" : "Enable automation"}
+              >
                 {item.status === "active" ? <ToggleRight className="h-4 w-4" /> : <ToggleLeft className="h-4 w-4" />}
               </Button>
               <Button variant="secondary" onClick={() => onRetry(item)} title="Retry failed workflow">

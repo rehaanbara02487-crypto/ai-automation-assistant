@@ -1,4 +1,4 @@
-import type { AutomationPlan, AutomationSummary, Integration } from "@/types/automation";
+import type { ActivityLogRecord, AutomationPlan, AutomationSummary, Integration } from "@/types/automation";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -87,4 +87,8 @@ export function retryAutomation(id: string) {
   return request<{ status: string }>(`/api/automations/${id}/retry`, {
     method: "POST"
   });
+}
+
+export function getAutomationLogs(automationId: string) {
+  return request<ActivityLogRecord[]>(`/api/automations/${automationId}/logs`);
 }

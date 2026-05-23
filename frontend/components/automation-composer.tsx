@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ArrowRight, Loader2, Sparkles } from "lucide-react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
+import { notifyAutomationsChanged } from "@/hooks/use-automations";
 import { createAutomation } from "@/services/api";
 import type { AutomationPlan } from "@/types/automation";
 
@@ -14,7 +15,12 @@ const examples = [
   "Auto reply to new business inquiries from Gmail."
 ];
 
-export function AutomationComposer({ compact = false }: { compact?: boolean }) {
+type AutomationComposerProps = {
+  compact?: boolean;
+  onCreated?: (plan: AutomationPlan) => void;
+};
+
+export function AutomationComposer({ compact = false, onCreated }: AutomationComposerProps) {
   const [prompt, setPrompt] = useState(examples[1]);
   const [businessType, setBusinessType] = useState("local_shop");
   const [plan, setPlan] = useState<AutomationPlan | null>(null);
@@ -27,6 +33,8 @@ export function AutomationComposer({ compact = false }: { compact?: boolean }) {
     try {
       const result = await createAutomation(prompt, businessType);
       setPlan(result);
+      notifyAutomationsChanged();
+      onCreated?.(result);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not create automation");
     } finally {
