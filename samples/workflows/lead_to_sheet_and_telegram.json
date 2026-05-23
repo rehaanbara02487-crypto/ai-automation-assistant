@@ -1,0 +1,12 @@
+{
+  "title": "Lead capture to Google Sheets and Telegram",
+  "trigger": "New website form submission",
+  "actions": [
+    "Add lead row to Google Sheets",
+    "Notify owner on Telegram",
+    "Create activity log"
+  ],
+  "apps": ["forms", "google_sheets", "telegram"],
+  "status": "sample"
+}
+

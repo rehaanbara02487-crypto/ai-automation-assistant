@@ -1,0 +1,12 @@
+{
+  "title": "Appointment reminder on WhatsApp",
+  "trigger": "New booking form response",
+  "actions": [
+    "Save customer and appointment details",
+    "Send WhatsApp reminder before appointment",
+    "Log delivery status"
+  ],
+  "apps": ["forms", "whatsapp"],
+  "status": "sample"
+}
+
