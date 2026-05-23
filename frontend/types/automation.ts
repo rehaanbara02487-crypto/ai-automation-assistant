@@ -35,5 +35,6 @@ export type ActivityLogRecord = {
   status: string;
   message: string;
   created_at: string;
+  metadata?: Record<string, unknown>;
 };
 

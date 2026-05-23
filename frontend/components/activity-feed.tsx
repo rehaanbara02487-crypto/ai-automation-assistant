@@ -18,10 +18,10 @@ type FeedEntry = ActivityLogRecord & {
 };
 
 function iconForStatus(status: string): LucideIcon {
-  if (status.includes("retry")) {
+  if (status === "running" || status === "queued" || status.includes("retry")) {
     return RefreshCcw;
   }
-  if (status.includes("fail") || status.includes("attention") || status.includes("error")) {
+  if (status === "failed" || status.includes("fail") || status.includes("attention") || status.includes("error")) {
     return TriangleAlert;
   }
   return CheckCircle2;
