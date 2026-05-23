@@ -4,8 +4,8 @@ import { useState } from "react";
 import { ArrowRight, Loader2, Sparkles } from "lucide-react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import { createAutomation } from "@/lib/api";
-import type { AutomationPlan } from "@/lib/types";
+import { createAutomation } from "@/services/api";
+import type { AutomationPlan } from "@/types/automation";
 
 const examples = [
   "Send appointment reminders automatically on WhatsApp.",
@@ -94,4 +94,3 @@ export function AutomationComposer({ compact = false }: { compact?: boolean }) {
     </div>
   );
 }
-

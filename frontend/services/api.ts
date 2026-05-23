@@ -1,4 +1,4 @@
-import type { AutomationPlan, AutomationSummary, Integration } from "@/lib/types";
+import type { AutomationPlan, AutomationSummary, Integration } from "@/types/automation";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -47,4 +47,3 @@ export function retryAutomation(id: string) {
     method: "POST"
   });
 }
-

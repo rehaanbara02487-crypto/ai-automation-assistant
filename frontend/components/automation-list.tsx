@@ -3,8 +3,8 @@
 import { useEffect, useState } from "react";
 import { AlertTriangle, CheckCircle2, Clock3, RefreshCcw, ToggleLeft, ToggleRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { getAutomations, retryAutomation, toggleAutomation } from "@/lib/api";
-import type { AutomationSummary } from "@/lib/types";
+import { getAutomations, retryAutomation, toggleAutomation } from "@/services/api";
+import type { AutomationSummary } from "@/types/automation";
 
 const fallback: AutomationSummary[] = [
   {
@@ -93,4 +93,3 @@ export function AutomationList() {
     </div>
   );
 }
-
