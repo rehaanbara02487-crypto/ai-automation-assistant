@@ -23,6 +23,17 @@ app = FastAPI(
     openapi_url=None if settings.is_production else "/openapi.json",
 )
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "https://beingai.space",
+        "https://www.beingai.space",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 register_exception_handlers(app, settings)
 
 app.add_middleware(
