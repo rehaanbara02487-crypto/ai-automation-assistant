@@ -6,7 +6,9 @@ from automation.executor import WorkflowExecutor
 from automation.n8n_client import N8NClient
 from automation.validator import AutomationValidationError
 from config import Settings, get_settings
+from database.session import get_db
 from database.store import AutomationStore
+from models.automation_sql import AutomationRecord
 from models.schemas import (
     ActivityLog,
     ActivityLogRecord,
@@ -14,8 +16,12 @@ from models.schemas import (
     AutomationSummary,
     CreateAutomationRequest,
     Integration,
+    SaveAutomationRequest,
+    SaveAutomationResponse,
     ToggleAutomationRequest,
 )
+from services.automation_sql_service import AutomationSQLService
+from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/api")
 
@@ -135,3 +141,21 @@ async def integrations() -> list[Integration]:
         Integration(id="whatsapp", name="WhatsApp", description="Mock reminders and customer messages.", status="mock"),
         Integration(id="forms", name="Forms/Webhooks", description="Receive website leads and events.", status="connected"),
     ]
+
+
+@router.post("/automations/save", response_model=SaveAutomationResponse)
+async def save_automation_sql(
+    payload: SaveAutomationRequest,
+    user_id: str = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> SaveAutomationResponse:
+    record: AutomationRecord = AutomationSQLService.save(db, user_id, payload)
+    return SaveAutomationResponse(
+        id=record.id,
+        user_id=record.user_id,
+        prompt=record.prompt,
+        trigger_type=record.trigger_type,
+        action_type=record.action_type,
+        status=record.status,
+        created_at=record.created_at.isoformat(),
+    )

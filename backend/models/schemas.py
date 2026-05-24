@@ -54,6 +54,23 @@ class ToggleAutomationRequest(BaseModel):
     enabled: bool
 
 
+class SaveAutomationRequest(BaseModel):
+    prompt: str = Field(min_length=3, max_length=2000)
+    trigger_type: str = Field(min_length=2, max_length=120)
+    action_type: str = Field(min_length=2, max_length=120)
+    status: str = Field(default="queued", max_length=50)
+
+
+class SaveAutomationResponse(BaseModel):
+    id: str
+    user_id: str
+    prompt: str
+    trigger_type: str
+    action_type: str
+    status: str
+    created_at: str
+
+
 class Integration(BaseModel):
     id: str
     name: str

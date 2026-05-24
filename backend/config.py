@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     stripe_webhook_secret: str = ""
     clerk_secret_key: str = ""
     clerk_jwt_issuer: str = ""
+    database_url: str = ""
     mock_user_id: str = Field(default="local-demo-user")
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
@@ -42,6 +43,12 @@ class Settings(BaseSettings):
     @property
     def n8n_enabled(self) -> bool:
         return bool(self.n8n_base_url and self.n8n_api_key)
+
+    @property
+    def sqlalchemy_database_url(self) -> str:
+        if self.database_url:
+            return self.database_url
+        return "sqlite:///./automation.db"
 
     def production_issues(self) -> list[str]:
         if not self.is_production:
