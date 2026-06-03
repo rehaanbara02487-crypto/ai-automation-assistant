@@ -1,22 +1,33 @@
 from datetime import datetime, timezone
-from typing import Dict, List, Optional
+from typing import Any, List, Optional
 from uuid import uuid4
 
-from supabase import Client, create_client
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
-from config import Settings
-from models.schemas import ActivityLog, ActivityLogRecord, AutomationStatus, AutomationSummary
+from database.models import Automation, User, WorkflowLog
+from models.schemas import (
+    ActivityLog,
+    ActivityLogRecord,
+    AutomationStatus,
+    AutomationSummary,
+    CreateAutomationRecordRequest,
+    StepKind,
+    UpdateAutomationRecordRequest,
+    WorkflowStep,
+)
 
 
 class AutomationStore:
-    def __init__(self, settings: Settings):
-        self.settings = settings
-        self.client: Client | None = None
-        self.memory: Dict[str, AutomationSummary] = {}
-        self.workflow_ids: Dict[str, str] = {}
-        self.memory_logs: Dict[str, List[ActivityLogRecord]] = {}
-        if settings.supabase_url and settings.supabase_service_role_key:
-            self.client = create_client(settings.supabase_url, settings.supabase_service_role_key)
+    def __init__(self, db: Session):
+        self.db = db
+
+    def _commit(self) -> None:
+        try:
+            self.db.commit()
+        except Exception:
+            self.db.rollback()
+            raise
 
     async def ensure_user(
         self,
@@ -24,228 +35,220 @@ class AutomationStore:
         email: Optional[str] = None,
         full_name: Optional[str] = None,
     ) -> None:
-        if not self.client:
-            return
-
-        payload: dict = {"id": user_id}
-        if email:
-            payload["email"] = email
-        if full_name:
-            payload["full_name"] = full_name
-
-        self.client.table("users").upsert(payload, on_conflict="id").execute()
+        user = self.db.get(User, user_id)
+        if not user:
+            user = User(id=user_id, email=email, full_name=full_name)
+            self.db.add(user)
+        else:
+            if email:
+                user.email = email
+            if full_name:
+                user.full_name = full_name
+        self._commit()
 
     async def list_automations(self, user_id: str) -> List[AutomationSummary]:
-        if not self.client:
-            return list(self.memory.values())
+        rows = self.db.scalars(
+            select(Automation).where(Automation.user_id == user_id).order_by(Automation.created_at.desc())
+        ).all()
+        return [self._from_model(row) for row in rows]
 
-        response = self.client.table("automations").select("*").eq("user_id", user_id).order("created_at", desc=True).execute()
-        return [self._from_row(row) for row in response.data]
+    async def create_automation_record(
+        self,
+        user_id: str,
+        payload: CreateAutomationRecordRequest,
+    ) -> AutomationSummary:
+        await self.ensure_user(user_id)
+        workflow_json = self._normalize_workflow_json(
+            payload.workflow_json,
+            trigger_type=payload.trigger_type,
+            description=payload.description,
+        )
+        automation = Automation(
+            user_id=user_id,
+            title=payload.title,
+            description=payload.description,
+            trigger_type=payload.trigger_type,
+            status=payload.status.value,
+            workflow_json=workflow_json,
+        )
+        self.db.add(automation)
+        self._commit()
+        self.db.refresh(automation)
+        return self._from_model(automation)
+
+    async def update_automation_record(
+        self,
+        automation_id: str,
+        user_id: str,
+        payload: UpdateAutomationRecordRequest,
+    ) -> AutomationSummary:
+        automation = self._get_model(automation_id, user_id)
+        if payload.title is not None:
+            automation.title = payload.title
+        if payload.description is not None:
+            automation.description = payload.description
+        if payload.trigger_type is not None:
+            automation.trigger_type = payload.trigger_type
+        if payload.status is not None:
+            automation.status = payload.status.value
+        if payload.workflow_json is not None:
+            automation.workflow_json = self._normalize_workflow_json(
+                payload.workflow_json,
+                trigger_type=automation.trigger_type,
+                description=automation.description,
+            )
+        self._commit()
+        self.db.refresh(automation)
+        return self._from_model(automation)
+
+    async def delete_automation(self, automation_id: str, user_id: str) -> None:
+        automation = self._get_model(automation_id, user_id)
+        self.db.delete(automation)
+        self._commit()
 
     async def save_automation(self, user_id: str, automation: AutomationSummary, workflow_id: str) -> AutomationSummary:
-        self.workflow_ids[automation.id] = workflow_id
-        if not self.client:
-            self.memory[automation.id] = automation
-            return automation
-
         await self.ensure_user(user_id)
-
-        self.client.table("automations").insert(
-            {
-                "id": automation.id,
-                "user_id": user_id,
-                "title": automation.title,
-                "status": automation.status.value if hasattr(automation.status, "value") else automation.status,
-                "trigger": automation.trigger,
-                "actions": automation.actions,
-                "summary": automation.summary,
-                "steps": [step.model_dump(mode="json") for step in automation.steps],
-                "workflow_id": workflow_id,
-                "error_count": automation.error_count,
-                "run_count": automation.run_count,
-            }
-        ).execute()
-        return automation
+        workflow_json = {
+            "trigger": automation.trigger,
+            "actions": automation.actions,
+            "summary": automation.summary,
+            "steps": [step.model_dump(mode="json") for step in automation.steps],
+            "workflow_id": workflow_id,
+            "error_count": automation.error_count,
+            "run_count": automation.run_count,
+            "last_run_at": automation.last_run_at,
+        }
+        row = Automation(
+            id=automation.id,
+            user_id=user_id,
+            title=automation.title,
+            description=automation.summary,
+            trigger_type=automation.trigger,
+            status=automation.status.value if hasattr(automation.status, "value") else automation.status,
+            workflow_json=workflow_json,
+        )
+        self.db.add(row)
+        self._commit()
+        self.db.refresh(row)
+        return self._from_model(row)
 
     async def update_status(self, automation_id: str, status: AutomationStatus, user_id: str) -> AutomationSummary:
-        if not self.client:
-            item = self.memory.get(automation_id)
-            if not item:
-                raise KeyError(automation_id)
-            item.status = status
-            return item
-
-        response = (
-            self.client.table("automations")
-            .update({"status": status.value})
-            .eq("id", automation_id)
-            .eq("user_id", user_id)
-            .execute()
-        )
-        if not response.data:
-            raise KeyError(automation_id)
-        return self._from_row(response.data[0])
+        automation = self._get_model(automation_id, user_id)
+        automation.status = status.value
+        self._commit()
+        self.db.refresh(automation)
+        return self._from_model(automation)
 
     async def get_workflow_id(self, automation_id: str, user_id: str) -> str:
-        if automation_id in self.workflow_ids:
-            if not self.client or automation_id in self.memory:
-                return self.workflow_ids[automation_id]
-
-        if not self.client:
-            if automation_id not in self.memory:
-                raise KeyError(automation_id)
-            return self.workflow_ids.get(automation_id, f"mock-{automation_id}")
-
-        response = (
-            self.client.table("automations")
-            .select("workflow_id")
-            .eq("id", automation_id)
-            .eq("user_id", user_id)
-            .execute()
-        )
-        if not response.data:
-            raise KeyError(automation_id)
-        return response.data[0]["workflow_id"]
+        automation = self._get_model(automation_id, user_id)
+        workflow_id = self._workflow_json(automation).get("workflow_id")
+        return str(workflow_id or f"mock-{automation_id}")
 
     async def automation_owned_by(self, automation_id: str, user_id: str) -> bool:
-        if not self.client:
-            return automation_id in self.memory
-
-        response = (
-            self.client.table("automations")
-            .select("id")
-            .eq("id", automation_id)
-            .eq("user_id", user_id)
-            .limit(1)
-            .execute()
-        )
-        return bool(response.data)
+        return self.db.scalar(
+            select(Automation.id).where(Automation.id == automation_id, Automation.user_id == user_id).limit(1)
+        ) is not None
 
     async def get_automation(self, automation_id: str, user_id: str) -> AutomationSummary:
-        if not self.client:
-            item = self.memory.get(automation_id)
-            if not item:
-                raise KeyError(automation_id)
-            return item
-
-        response = (
-            self.client.table("automations")
-            .select("*")
-            .eq("id", automation_id)
-            .eq("user_id", user_id)
-            .execute()
-        )
-        if not response.data:
-            raise KeyError(automation_id)
-        return self._from_row(response.data[0])
+        return self._from_model(self._get_model(automation_id, user_id))
 
     async def record_run_success(self, automation_id: str, user_id: str, finished_at: str) -> AutomationSummary:
-        if not self.client:
-            item = self.memory.get(automation_id)
-            if not item:
-                raise KeyError(automation_id)
-            item.run_count += 1
-            item.last_run_at = finished_at
-            if item.status == AutomationStatus.failed:
-                item.status = AutomationStatus.active
-            return item
-
-        current = await self.get_automation(automation_id, user_id)
-        response = (
-            self.client.table("automations")
-            .update(
-                {
-                    "run_count": current.run_count + 1,
-                    "last_run_at": finished_at,
-                    "status": AutomationStatus.active.value,
-                    "updated_at": finished_at,
-                }
-            )
-            .eq("id", automation_id)
-            .eq("user_id", user_id)
-            .execute()
-        )
-        if not response.data:
-            raise KeyError(automation_id)
-        return self._from_row(response.data[0])
+        automation = self._get_model(automation_id, user_id)
+        data = self._workflow_json(automation)
+        data["run_count"] = int(data.get("run_count", 0)) + 1
+        data["last_run_at"] = finished_at
+        if automation.status == AutomationStatus.failed.value:
+            automation.status = AutomationStatus.active.value
+        automation.workflow_json = data
+        self._commit()
+        self.db.refresh(automation)
+        return self._from_model(automation)
 
     async def record_run_failure(self, automation_id: str, user_id: str, finished_at: str) -> AutomationSummary:
-        if not self.client:
-            item = self.memory.get(automation_id)
-            if not item:
-                raise KeyError(automation_id)
-            item.error_count += 1
-            item.last_run_at = finished_at
-            item.status = AutomationStatus.failed
-            return item
-
-        current = await self.get_automation(automation_id, user_id)
-        response = (
-            self.client.table("automations")
-            .update(
-                {
-                    "error_count": current.error_count + 1,
-                    "last_run_at": finished_at,
-                    "status": AutomationStatus.failed.value,
-                    "updated_at": finished_at,
-                }
-            )
-            .eq("id", automation_id)
-            .eq("user_id", user_id)
-            .execute()
-        )
-        if not response.data:
-            raise KeyError(automation_id)
-        return self._from_row(response.data[0])
+        automation = self._get_model(automation_id, user_id)
+        data = self._workflow_json(automation)
+        data["error_count"] = int(data.get("error_count", 0)) + 1
+        data["last_run_at"] = finished_at
+        automation.status = AutomationStatus.failed.value
+        automation.workflow_json = data
+        self._commit()
+        self.db.refresh(automation)
+        return self._from_model(automation)
 
     async def log(self, log: ActivityLog) -> None:
-        record = ActivityLogRecord(
-            id=str(uuid4()),
-            automation_id=log.automation_id,
-            status=log.status,
-            message=log.message,
-            metadata=log.metadata,
-            created_at=datetime.now(timezone.utc).isoformat(),
+        self.db.add(
+            WorkflowLog(
+                automation_id=log.automation_id,
+                status=log.status,
+                message=log.message,
+                metadata_json=log.metadata,
+            )
         )
-
-        if not self.client:
-            logs = self.memory_logs.setdefault(log.automation_id, [])
-            logs.insert(0, record)
-            self.memory_logs[log.automation_id] = logs[:50]
-            return
-
-        self.client.table("workflow_logs").insert(
-            {
-                "automation_id": log.automation_id,
-                "status": log.status,
-                "message": log.message,
-                "metadata": log.metadata,
-            }
-        ).execute()
+        self._commit()
 
     async def list_logs(self, automation_id: str) -> List[ActivityLogRecord]:
-        if not self.client:
-            return self.memory_logs.get(automation_id, [])[:25]
-        response = (
-            self.client.table("workflow_logs")
-            .select("*")
-            .eq("automation_id", automation_id)
-            .order("created_at", desc=True)
+        rows = self.db.scalars(
+            select(WorkflowLog)
+            .where(WorkflowLog.automation_id == automation_id)
+            .order_by(WorkflowLog.created_at.desc())
             .limit(25)
-            .execute()
-        )
-        return [ActivityLogRecord(**row) for row in response.data]
+        ).all()
+        return [
+            ActivityLogRecord(
+                id=row.id,
+                automation_id=row.automation_id,
+                status=row.status,
+                message=row.message,
+                metadata=row.metadata_json,
+                created_at=self._to_iso(row.created_at),
+            )
+            for row in rows
+        ]
 
-    def _from_row(self, row: dict) -> AutomationSummary:
-        return AutomationSummary(
-            id=row["id"],
-            title=row["title"],
-            status=row["status"],
-            trigger=row["trigger"],
-            actions=row["actions"],
-            summary=row["summary"],
-            steps=row["steps"],
-            last_run_at=row.get("last_run_at"),
-            error_count=row.get("error_count", 0),
-            run_count=row.get("run_count", 0),
+    def _get_model(self, automation_id: str, user_id: str) -> Automation:
+        automation = self.db.scalar(
+            select(Automation).where(Automation.id == automation_id, Automation.user_id == user_id).limit(1)
         )
+        if not automation:
+            raise KeyError(automation_id)
+        return automation
+
+    def _workflow_json(self, automation: Automation) -> dict[str, Any]:
+        return dict(automation.workflow_json or {})
+
+    def _normalize_workflow_json(
+        self,
+        workflow_json: dict[str, Any],
+        *,
+        trigger_type: str,
+        description: str,
+    ) -> dict[str, Any]:
+        data = dict(workflow_json or {})
+        data.setdefault("trigger", trigger_type)
+        data.setdefault("actions", [])
+        data.setdefault("summary", description)
+        data.setdefault("steps", [{"label": trigger_type, "app": "manual", "kind": StepKind.trigger.value}])
+        data.setdefault("workflow_id", f"mock-{uuid4()}")
+        data.setdefault("error_count", 0)
+        data.setdefault("run_count", 0)
+        data.setdefault("last_run_at", None)
+        return data
+
+    def _from_model(self, row: Automation) -> AutomationSummary:
+        data = self._workflow_json(row)
+        steps = data.get("steps") or [{"label": row.trigger_type, "app": "manual", "kind": StepKind.trigger.value}]
+        return AutomationSummary(
+            id=row.id,
+            title=row.title,
+            status=row.status,
+            trigger=str(data.get("trigger") or row.trigger_type),
+            actions=list(data.get("actions") or []),
+            summary=str(data.get("summary") or row.description),
+            steps=[step if isinstance(step, WorkflowStep) else WorkflowStep(**step) for step in steps],
+            last_run_at=data.get("last_run_at"),
+            error_count=int(data.get("error_count", 0)),
+            run_count=int(data.get("run_count", 0)),
+        )
+
+    def _to_iso(self, value: datetime | None) -> str:
+        return (value or datetime.now(timezone.utc)).isoformat()

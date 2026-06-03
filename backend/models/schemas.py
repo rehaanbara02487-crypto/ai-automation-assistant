@@ -45,6 +45,22 @@ class AutomationSummary(AutomationPlan):
     run_count: int = 0
 
 
+class CreateAutomationRecordRequest(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
+    description: str = Field(default="", max_length=4000)
+    trigger_type: str = Field(default="manual", max_length=120)
+    status: AutomationStatus = AutomationStatus.draft
+    workflow_json: Dict[str, Any] = Field(default_factory=dict)
+
+
+class UpdateAutomationRecordRequest(BaseModel):
+    title: Optional[str] = Field(default=None, min_length=1, max_length=200)
+    description: Optional[str] = Field(default=None, max_length=4000)
+    trigger_type: Optional[str] = Field(default=None, max_length=120)
+    status: Optional[AutomationStatus] = None
+    workflow_json: Optional[Dict[str, Any]] = None
+
+
 class CreateAutomationRequest(BaseModel):
     prompt: str = Field(min_length=12, max_length=1200)
     business_type: str = Field(default="local_shop", max_length=80)

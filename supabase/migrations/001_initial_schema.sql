@@ -52,15 +52,10 @@ create table if not exists public.automations (
   id uuid primary key,
   user_id text not null references public.users(id) on delete cascade,
   title text not null,
+  description text not null,
+  trigger_type text not null,
   status text not null check (status in ('active', 'draft', 'failed', 'paused')),
-  trigger text not null,
-  actions jsonb not null default '[]'::jsonb,
-  summary text not null,
-  steps jsonb not null default '[]'::jsonb,
-  workflow_id text not null,
-  error_count integer not null default 0,
-  run_count integer not null default 0,
-  last_run_at timestamptz,
+  workflow_json jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );

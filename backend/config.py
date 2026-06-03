@@ -8,6 +8,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     app_env: str = "development"
     api_cors_origins: str = "http://localhost:3000"
+    database_url: str = ""
     supabase_url: str = ""
     supabase_service_role_key: str = ""
     openai_api_key: str = ""
@@ -37,6 +38,10 @@ class Settings(BaseSettings):
         return bool(self.supabase_url and self.supabase_service_role_key)
 
     @property
+    def database_configured(self) -> bool:
+        return bool(self.database_url.strip())
+
+    @property
     def auth_enabled(self) -> bool:
         return bool(self.clerk_secret_key and self.clerk_jwt_issuer)
 
@@ -57,8 +62,8 @@ class Settings(BaseSettings):
         issues: list[str] = []
         if not self.auth_enabled:
             issues.append("Set CLERK_SECRET_KEY and CLERK_JWT_ISSUER for production auth.")
-        if not self.supabase_configured:
-            issues.append("Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY for persistent data.")
+        if not self.database_configured:
+            issues.append("Set DATABASE_URL for PostgreSQL persistence.")
         if any("localhost" in origin or "127.0.0.1" in origin for origin in self.cors_origins):
             issues.append("API_CORS_ORIGINS should list your production frontend URL, not localhost.")
         return issues
@@ -67,4 +72,3 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
-

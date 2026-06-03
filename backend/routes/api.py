@@ -15,15 +15,26 @@ from models.schemas import (
     AutomationStatus,
     AutomationSummary,
     CreateAutomationRequest,
+    CreateAutomationRecordRequest,
     Integration,
     SaveAutomationRequest,
     SaveAutomationResponse,
     ToggleAutomationRequest,
+    UpdateAutomationRecordRequest,
 )
 from services.automation_sql_service import AutomationSQLService
 from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/api")
+
+
+@router.post("/automations", response_model=AutomationSummary)
+async def create_automation_record(
+    payload: CreateAutomationRecordRequest,
+    store: AutomationStore = Depends(get_store),
+    user_id: str = Depends(get_current_user),
+) -> AutomationSummary:
+    return await store.create_automation_record(user_id, payload)
 
 
 @router.post("/automations/create", response_model=AutomationSummary)
@@ -61,6 +72,44 @@ async def list_automations(
     user_id: str = Depends(get_current_user),
 ) -> list[AutomationSummary]:
     return await store.list_automations(user_id)
+
+
+@router.get("/automations/{automation_id}", response_model=AutomationSummary)
+async def get_automation(
+    automation_id: str,
+    store: AutomationStore = Depends(get_store),
+    user_id: str = Depends(get_current_user),
+) -> AutomationSummary:
+    try:
+        return await store.get_automation(automation_id, user_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Automation not found") from exc
+
+
+@router.put("/automations/{automation_id}", response_model=AutomationSummary)
+async def update_automation(
+    automation_id: str,
+    payload: UpdateAutomationRecordRequest,
+    store: AutomationStore = Depends(get_store),
+    user_id: str = Depends(get_current_user),
+) -> AutomationSummary:
+    try:
+        return await store.update_automation_record(automation_id, user_id, payload)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Automation not found") from exc
+
+
+@router.delete("/automations/{automation_id}")
+async def delete_automation(
+    automation_id: str,
+    store: AutomationStore = Depends(get_store),
+    user_id: str = Depends(get_current_user),
+) -> dict[str, str]:
+    try:
+        await store.delete_automation(automation_id, user_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Automation not found") from exc
+    return {"status": "deleted"}
 
 
 @router.post("/automations/{automation_id}/toggle", response_model=AutomationSummary)

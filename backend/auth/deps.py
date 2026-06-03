@@ -1,16 +1,16 @@
 from typing import Any
 
 from fastapi import Depends, HTTPException, Request
+from sqlalchemy.orm import Session
 
 from auth.clerk_jwt import verify_clerk_token
 from config import Settings, get_settings
+from database.session import get_db_session
 from database.store import AutomationStore
 
 
-def get_store(settings: Settings = Depends(get_settings)) -> AutomationStore:
-    if not hasattr(get_store, "_store"):
-        get_store._store = AutomationStore(settings)  # type: ignore[attr-defined]
-    return get_store._store  # type: ignore[attr-defined]
+def get_store(db: Session = Depends(get_db_session)) -> AutomationStore:
+    return AutomationStore(db)
 
 
 def _email_from_claims(claims: dict[str, Any]) -> str | None:

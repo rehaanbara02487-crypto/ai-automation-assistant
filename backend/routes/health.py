@@ -1,9 +1,9 @@
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
+from sqlalchemy import text
 
 from config import Settings, get_settings
-from database.store import AutomationStore
-from auth.deps import get_store
+from database.connection import engine
 
 router = APIRouter(tags=["health"])
 
@@ -25,7 +25,6 @@ async def api_health(settings: Settings = Depends(get_settings)) -> dict:
 @router.get("/api/ready")
 async def api_ready(
     settings: Settings = Depends(get_settings),
-    store: AutomationStore = Depends(get_store),
 ) -> JSONResponse:
     checks: dict[str, str] = {
         "api": "ok",
@@ -35,16 +34,19 @@ async def api_ready(
         "openai": "configured" if settings.openai_api_key else "fallback_planner",
     }
 
-    if settings.supabase_configured:
+    if not settings.database_configured:
+        checks["database"] = "missing_database_url"
+    elif engine is None:
+        checks["database"] = "unavailable"
+    else:
         try:
-            store.client.table("plans").select("id").limit(1).execute()  # type: ignore[union-attr]
+            with engine.connect() as connection:
+                connection.execute(text("select 1"))
             checks["database"] = "connected"
         except Exception:
             checks["database"] = "unavailable"
-    else:
-        checks["database"] = "memory_fallback"
 
-    blocking = [name for name, state in checks.items() if state == "unavailable"]
+    blocking = [name for name, state in checks.items() if state in {"unavailable", "missing_database_url"}]
     status_code = 503 if blocking else 200
 
     return JSONResponse(

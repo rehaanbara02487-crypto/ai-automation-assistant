@@ -9,6 +9,5 @@ python-dotenv==1.0.1
 PyJWT[crypto]==2.10.1
 tenacity==9.0.0
 stripe==11.6.0
-SQLAlchemy==2.0.49
-psycopg[binary]==3.3.4
-
+SQLAlchemy==2.0.38
+psycopg2-binary==2.9.10 (Add PostgreSQL persistence with Supabase)

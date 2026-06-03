@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from config import get_settings
-from database.session import init_sqlalchemy
+from database.connection import create_database_tables
 from middleware.errors import register_exception_handlers
 from middleware.rate_limit import InMemoryRateLimitMiddleware
 from routes.api import router as api_router
@@ -39,9 +39,8 @@ app.add_middleware(InMemoryRateLimitMiddleware)
 app.include_router(health_router)
 app.include_router(api_router)
 
-
 @app.on_event("startup")
 async def log_startup_configuration() -> None:
-    init_sqlalchemy()
+    create_database_tables()
     for issue in settings.production_issues():
         logger.warning("Production configuration: %s", issue)
