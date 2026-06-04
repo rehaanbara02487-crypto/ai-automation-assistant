@@ -34,17 +34,27 @@ class AutomationStore:
         user_id: str,
         email: Optional[str] = None,
         full_name: Optional[str] = None,
-    ) -> None:
+    ) -> User:
+        now = datetime.now(timezone.utc)
         user = self.db.get(User, user_id)
         if not user:
-            user = User(id=user_id, email=email, full_name=full_name)
+            user = User(id=user_id, email=email, full_name=full_name, last_login_at=now)
             self.db.add(user)
         else:
             if email:
                 user.email = email
             if full_name:
                 user.full_name = full_name
+            user.last_login_at = now
         self._commit()
+        self.db.refresh(user)
+        return user
+
+    async def get_user(self, user_id: str) -> User:
+        user = self.db.get(User, user_id)
+        if not user:
+            raise KeyError(user_id)
+        return user
 
     async def list_automations(self, user_id: str) -> List[AutomationSummary]:
         rows = self.db.scalars(

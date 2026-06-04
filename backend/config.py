@@ -1,7 +1,6 @@
 from functools import lru_cache
 from typing import List
 
-from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -20,8 +19,9 @@ class Settings(BaseSettings):
     stripe_webhook_secret: str = ""
     clerk_secret_key: str = ""
     clerk_jwt_issuer: str = ""
-    database_url: str = ""
-    mock_user_id: str = Field(default="local-demo-user")
+    google_client_id: str = ""
+    google_client_secret: str = ""
+    google_refresh_token: str = ""
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
@@ -50,10 +50,8 @@ class Settings(BaseSettings):
         return bool(self.n8n_base_url and self.n8n_api_key)
 
     @property
-    def sqlalchemy_database_url(self) -> str:
-        if self.database_url:
-            return self.database_url
-        return "sqlite:///./automation.db"
+    def gmail_configured(self) -> bool:
+        return bool(self.google_client_id and self.google_client_secret and self.google_refresh_token)
 
     def production_issues(self) -> list[str]:
         if not self.is_production:
@@ -64,6 +62,8 @@ class Settings(BaseSettings):
             issues.append("Set CLERK_SECRET_KEY and CLERK_JWT_ISSUER for production auth.")
         if not self.database_configured:
             issues.append("Set DATABASE_URL for PostgreSQL persistence.")
+        if not self.gmail_configured:
+            issues.append("Set GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, and GOOGLE_REFRESH_TOKEN to enable Gmail sending.")
         if any("localhost" in origin or "127.0.0.1" in origin for origin in self.cors_origins):
             issues.append("API_CORS_ORIGINS should list your production frontend URL, not localhost.")
         return issues

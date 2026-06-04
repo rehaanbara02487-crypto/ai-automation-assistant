@@ -31,8 +31,10 @@ async def get_current_user(
     store: AutomationStore = Depends(get_store),
 ) -> str:
     if not settings.auth_enabled:
-        await store.ensure_user(settings.mock_user_id, email="demo@local")
-        return settings.mock_user_id
+        raise HTTPException(
+            status_code=503,
+            detail="Authentication is not configured. Set CLERK_SECRET_KEY and CLERK_JWT_ISSUER.",
+        )
 
     authorization = request.headers.get("Authorization")
     if not authorization or not authorization.lower().startswith("bearer "):

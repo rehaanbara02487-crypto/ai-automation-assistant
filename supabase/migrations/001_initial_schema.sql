@@ -6,6 +6,7 @@ create table if not exists public.users (
   full_name text,
   business_type text,
   onboarding_completed boolean not null default false,
+  last_login_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );

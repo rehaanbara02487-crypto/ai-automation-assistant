@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import JSONResponse
 
 from ai.orchestrator import AIOrchestrator
 from auth.deps import get_current_user, get_store
@@ -6,9 +7,7 @@ from automation.executor import WorkflowExecutor
 from automation.n8n_client import N8NClient
 from automation.validator import AutomationValidationError
 from config import Settings, get_settings
-from database.session import get_db_session
 from database.store import AutomationStore
-from models.automation_sql import AutomationRecord
 from models.schemas import (
     ActivityLog,
     ActivityLogRecord,
@@ -16,16 +15,49 @@ from models.schemas import (
     AutomationSummary,
     CreateAutomationRequest,
     CreateAutomationRecordRequest,
+    CurrentUserResponse,
+    GmailSendRequest,
+    GmailSendResponse,
     Integration,
-    SaveAutomationRequest,
-    SaveAutomationResponse,
     ToggleAutomationRequest,
     UpdateAutomationRecordRequest,
 )
-from services.automation_sql_service import AutomationSQLService
-from sqlalchemy.orm import Session
+from services.gmail_service import GmailService
 
 router = APIRouter(prefix="/api")
+
+
+@router.get("/auth/me", response_model=CurrentUserResponse)
+async def current_user_profile(
+    store: AutomationStore = Depends(get_store),
+    user_id: str = Depends(get_current_user),
+) -> CurrentUserResponse:
+    try:
+        user = await store.get_user(user_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="User not found") from exc
+    return CurrentUserResponse(id=user.id, email=user.email, full_name=user.full_name)
+
+
+@router.post("/gmail/send", response_model=GmailSendResponse)
+async def send_gmail(
+    payload: GmailSendRequest,
+    settings: Settings = Depends(get_settings),
+    user_id: str = Depends(get_current_user),
+) -> GmailSendResponse | JSONResponse:
+    try:
+        result = GmailService(settings).send_email(to=payload.to, subject=payload.subject, body=payload.body)
+    except HTTPException as exc:
+        return JSONResponse(
+            status_code=exc.status_code,
+            content=GmailSendResponse(success=False, message=str(exc.detail)).model_dump(),
+        )
+
+    return GmailSendResponse(
+        success=True,
+        message="Email sent successfully.",
+        message_id=result["message_id"],
+    )
 
 
 @router.post("/automations", response_model=AutomationSummary)
@@ -190,21 +222,3 @@ async def integrations() -> list[Integration]:
         Integration(id="whatsapp", name="WhatsApp", description="Mock reminders and customer messages.", status="mock"),
         Integration(id="forms", name="Forms/Webhooks", description="Receive website leads and events.", status="connected"),
     ]
-
-
-@router.post("/automations/save", response_model=SaveAutomationResponse)
-async def save_automation_sql(
-    payload: SaveAutomationRequest,
-    user_id: str = Depends(get_current_user),
-    db: Session = Depends(get_db_session),
-) -> SaveAutomationResponse:
-    record: AutomationRecord = AutomationSQLService.save(db, user_id, payload)
-    return SaveAutomationResponse(
-        id=record.id,
-        user_id=record.user_id,
-        prompt=record.prompt,
-        trigger_type=record.trigger_type,
-        action_type=record.action_type,
-        status=record.status,
-        created_at=record.created_at.isoformat(),
-    )

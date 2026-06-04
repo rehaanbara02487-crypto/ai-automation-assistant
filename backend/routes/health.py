@@ -29,7 +29,7 @@ async def api_ready(
     checks: dict[str, str] = {
         "api": "ok",
         "environment": settings.app_env,
-        "auth": "enabled" if settings.auth_enabled else "demo_fallback",
+        "auth": "enabled" if settings.auth_enabled else "missing_clerk_config",
         "n8n": "live" if settings.n8n_enabled else "mock",
         "openai": "configured" if settings.openai_api_key else "fallback_planner",
     }
@@ -46,7 +46,11 @@ async def api_ready(
         except Exception:
             checks["database"] = "unavailable"
 
-    blocking = [name for name, state in checks.items() if state in {"unavailable", "missing_database_url"}]
+    blocking = [
+        name
+        for name, state in checks.items()
+        if state in {"unavailable", "missing_database_url", "missing_clerk_config"}
+    ]
     status_code = 503 if blocking else 200
 
     return JSONResponse(

@@ -10,6 +10,12 @@ export function setAuthTokenGetter(getter: TokenGetter | null) {
   authTokenGetter = getter;
 }
 
+export type CurrentUser = {
+  id: string;
+  email?: string | null;
+  full_name?: string | null;
+};
+
 function formatDetail(detail: unknown): string {
   if (typeof detail === "string") {
     return detail;
@@ -66,6 +72,10 @@ export function createAutomation(input: string, businessType: string) {
     method: "POST",
     body: JSON.stringify({ prompt: input, business_type: businessType })
   });
+}
+
+export function syncCurrentUser() {
+  return request<CurrentUser>("/api/auth/me");
 }
 
 export function getAutomations() {

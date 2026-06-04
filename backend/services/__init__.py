@@ -1,6 +1,6 @@
 """Application service layer."""
 
-from services.automation_sql_service import AutomationSQLService
+from services.gmail_service import GmailService
 
-__all__ = ["AutomationSQLService"]
+__all__ = ["GmailService"]
 

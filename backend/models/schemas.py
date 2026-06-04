@@ -1,7 +1,7 @@
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class AutomationStatus(str, Enum):
@@ -61,6 +61,12 @@ class UpdateAutomationRecordRequest(BaseModel):
     workflow_json: Optional[Dict[str, Any]] = None
 
 
+class CurrentUserResponse(BaseModel):
+    id: str
+    email: Optional[str] = None
+    full_name: Optional[str] = None
+
+
 class CreateAutomationRequest(BaseModel):
     prompt: str = Field(min_length=12, max_length=1200)
     business_type: str = Field(default="local_shop", max_length=80)
@@ -70,21 +76,27 @@ class ToggleAutomationRequest(BaseModel):
     enabled: bool
 
 
-class SaveAutomationRequest(BaseModel):
-    prompt: str = Field(min_length=3, max_length=2000)
-    trigger_type: str = Field(min_length=2, max_length=120)
-    action_type: str = Field(min_length=2, max_length=120)
-    status: str = Field(default="queued", max_length=50)
+class GmailSendRequest(BaseModel):
+    to: str = Field(min_length=3, max_length=320)
+    subject: str = Field(min_length=1, max_length=500)
+    body: str = Field(min_length=1, max_length=20000)
+
+    @field_validator("to")
+    @classmethod
+    def normalize_recipient(cls, value: str) -> str:
+        recipient = value.strip()
+        marker = "](mailto:"
+        if marker in recipient and recipient.endswith(")"):
+            recipient = recipient.split(marker, 1)[1][:-1]
+        if recipient.lower().startswith("mailto:"):
+            recipient = recipient[7:]
+        return recipient.strip()
 
 
-class SaveAutomationResponse(BaseModel):
-    id: str
-    user_id: str
-    prompt: str
-    trigger_type: str
-    action_type: str
-    status: str
-    created_at: str
+class GmailSendResponse(BaseModel):
+    success: bool
+    message: str
+    message_id: Optional[str] = None
 
 
 class Integration(BaseModel):

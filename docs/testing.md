@@ -28,7 +28,7 @@ Expected result:
 7. Integrations page lists Gmail, Google Sheets, Telegram, WhatsApp, and Forms/Webhooks.
 8. Pricing page shows Free, Pro, and Team-ready plans.
 9. Settings page shows reliability defaults.
-10. Login/signup pages render demo placeholders locally when Clerk keys are missing.
+10. Login/signup pages require Clerk configuration; protected pages require login.
 
 ## API Failure Handling Tests
 
@@ -49,18 +49,12 @@ Unsupported apps should not be deployed as raw invented actions. The planner map
 
 ## Authentication Test
 
-Local demo mode:
-
-- Leave Clerk keys blank.
-- Visit `/sign-in` and `/sign-up`.
-- You should see local demo placeholders.
-
-Real Clerk mode:
-
 - Add `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` to `frontend/.env.local`.
 - Add `CLERK_SECRET_KEY` to `frontend/.env.local`.
+- Add `CLERK_SECRET_KEY` and `CLERK_JWT_ISSUER` to `backend/.env`.
 - Restart `npm run dev`.
 - Protected pages should require login.
+- After login, call `/api/auth/me` or load the dashboard; a row should exist in `users` with the Clerk user id.
 
 ## Workflow Execution Test
 
@@ -69,6 +63,13 @@ Mock n8n mode:
 - Leave `N8N_BASE_URL` and `N8N_API_KEY` blank.
 - Create an automation.
 - Response should include status `active`.
+
+## Gmail Sending Test
+
+- Set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `GOOGLE_REFRESH_TOKEN` in `backend/.env`.
+- Sign in so API calls include a Clerk bearer token.
+- POST to `/api/gmail/send` with `to`, `subject`, and `body`.
+- A successful response includes `success: true` and a Gmail `message_id`.
 
 Real n8n mode:
 
