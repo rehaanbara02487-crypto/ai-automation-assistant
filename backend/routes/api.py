@@ -6,7 +6,7 @@ from automation.executor import WorkflowExecutor
 from automation.n8n_client import N8NClient
 from automation.validator import AutomationValidationError
 from config import Settings, get_settings
-from database.session import get_db
+from database.session import get_db_session
 from database.store import AutomationStore
 from models.automation_sql import AutomationRecord
 from models.schemas import (
@@ -196,7 +196,7 @@ async def integrations() -> list[Integration]:
 async def save_automation_sql(
     payload: SaveAutomationRequest,
     user_id: str = Depends(get_current_user),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db_session),
 ) -> SaveAutomationResponse:
     record: AutomationRecord = AutomationSQLService.save(db, user_id, payload)
     return SaveAutomationResponse(
